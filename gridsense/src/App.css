@@ -102,3 +102,11 @@ body {
   border-radius: 12px;
   padding: 20px;
 }
+
+.cloud-panel {
+  background: #0d1525;
+  border: 1px solid #1a2a40;
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+}
