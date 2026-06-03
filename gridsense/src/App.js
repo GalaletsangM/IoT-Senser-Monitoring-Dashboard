@@ -5,6 +5,8 @@ import {
 import './App.css';
 
 const API_URL = "https://fkwyvi59j3.execute-api.us-east-1.amazonaws.com/prod/readings";
+const MAX_ALERTS = 20;
+const MAX_HISTORY = 20; //number of data points the chart keeps
 
 //Sensor config -- my device registry
 const SENSORS = [
@@ -12,9 +14,7 @@ const SENSORS = [
   {id: 'current', label: 'Current', unit: 'A', base: 15, range: 3, warn: 18},
   {id: 'temperature', label: 'Temperature', unit: '°C', base: 65, range: 8, warn: 75},
   {id: 'power', label: 'Power', unit: 'kW', base: 3.3, range: 0.5, warn: 4},
-]
-
-const MAX_HISTORY = 20; //number of data points the chart keeps
+]; 
 
 //Simulating a sensor reading with slight random drift
 function generateReading(sensor) {
@@ -100,48 +100,86 @@ function SensorChart({sensor, history}) {
   );
 }
 
-// Cloud history panel
-function CloudHistory({ cloudData, loading }) {
-  if (loading) {
-    return (<div className="cloud-panel">
-      <div className="label">☁️ Cloud Storage (DynamoDB)</div>
-      <div style={{color: '#4a6a8a', fontSize: '0.8rem', marginTop: 12}}>Fetching from AWS...</div>
-    </div> );
+// Alerts Panel
+function AlertsPanel({alerts}) {
+  if (alerts.length === 0) {
+    return (
+      <div className="alerts-panel">
+        <div className="label">🚨 Alert Log</div>
+        <div className="no-alerts">✔️ All sensors within normal range</div>
+      </div>
+    );
   }
 
   return (
+    <div className="alerts-panel">
+      <div className="label"  style={{marginBottom: 12}}>
+        🚨 Alert Log
+        <span className="alert-badge">{alerts.length} alert{alerts.length === 1 ? 's' : ''}</span>
+      </div>
+      {alerts.map((a, i) => (
+        <div key={i} className="alert-row">
+          <div className={`alert-dot ${a.level}`}></div>
+          <span className="alert-time">{a.time}</span>
+          <span className="alert-sensor">{a.sensor}</span>
+          <span className="alert.msg">{a.message}</span>
+          <span className="alert-value">{a.value}{a.unit}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+// Cloud history panel
+function CloudHistory({ cloudData, loading }) {
+  return (
     <div className="cloud-panel">
       <div className="label" style={{marginBottom: 12}}>
-        ☁️ Cloud Storage - Last {cloudData.length} readings saved to DynamoDB</div>
-      <div style={{overflow: 'auto'}}>
-        <table style={{width: '100%', boarderCollapse: 'collapse', fontSize: '0.78rem'}}>
-          <thead>
-            <tr style={{color: '#4a6a8a', textAlign: 'left'}}>
-              <th style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>Sensor</th>
-              <th style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>Value</th>
-              <th style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>Unit</th>
-              <th style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>Timestamp</th>
-            </tr>
-          </thead>
-          <tbody>
-            {cloudData.slice(0, 10).map((row, i) => (
-              <tr key={i} style={{color: '#c8d6e8'}}>
-                <td style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>{row.sensorId}</td>
-                <td style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>{row.value}</td>
-                <td style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>{row.unit}</td>
-                <td style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>
-                  {new Date(row.timestamp).toLocaleTimeString}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        {loading
+          ? '☁️ Cloud Storage - Fetching from AWS...'
+          : `☁️ Cloud Storage - Last ${cloudData.length} readings saved to DynamoDB`
+        } 
       </div>
+      {!loading && (
+        <div style={{overflowX: 'auto'}}>
+          <table style={{width: '100%', boarderCollapse: 'collapse', fontSize: '0.78rem'}}>
+            <thead>
+              <tr style={{color: '#4a6a8a', textAlign: 'left'}}>
+                <th style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>Sensor</th>
+                <th style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>Value</th>
+                <th style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>Unit</th>
+                <th style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {cloudData.slice(0, 10).map((row, i) => (
+                <tr key={i} style={{color: '#c8d6e8'}}>
+                  <td style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>{row.sensorId}</td>
+                  <td style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>{row.value}</td>
+                  <td style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>{row.unit}</td>
+                  <td style={{padding: '6px 12px', borderBottom: '1px solid #1a2a40'}}>
+                    {new Date(row.timestamp).toLocaleTimeString()}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )} 
     </div>
   );
 }
 
 export default function App() {
+  const [darkMode, setDarkMode] = useState(true);
+  const toggleTheme = () => {
+    setDarkMode(prev => {
+      document.documentElement.classList.toggle('light', prev);
+      return !prev;
+    });
+  }; 
+
   const [readings, setReadings] = useState(() =>
     Object.fromEntries(SENSORS.map(s => [s.id, generateReading(s)]))
   );
@@ -151,9 +189,10 @@ export default function App() {
   const [history, setHistory] = useState(() =>
     Object.fromEntries(SENSORS.map(s => [s.id, []]))
   );
+  const [alerts, setAlerts] = useState([]); 
   const [cloudData, setCloudData] = useState([]);
   const [cloudLoading, setCloudLoading] = useState(true);
-  const [saveCounter, setSaveCounter] = useState(0);
+  const [, setSaveCounter] = useState(0);
   const [cloudStatus, setCloudStatus] = useState('idle');
 
   // Fecth stored readings from DynamoDB on load
@@ -204,6 +243,26 @@ export default function App() {
         )
       );
 
+      // Check thresholds and generate alerts
+      const newAlerts = [];
+      SENSORS.forEach(s => {
+        const val = newReadings[s.id];
+        if (val >= s.warn) {
+          newAlerts.push({
+            time: timestamp,
+            sensor: s.label,
+            message: `Exceeded threshold of ${s.warn}${s.unit}`,
+            value: val,
+            unit: s.unit,
+            level: 'warn'
+          });
+        }
+      });
+
+      if (newAlerts.length > 0) {
+        setAlerts(prev => [...newAlerts, ...prev].slice(0, MAX_ALERTS));
+      }
+
       // Save to cloud every 5 seconds (10 seconds)
       setSaveCounter(prev => {
         const next = prev + 1;
@@ -211,7 +270,7 @@ export default function App() {
           setCloudStatus('saving');
           Promise.all(
             SENSORS.map(s => saveReading(s.id, newReadings[s.id], s.unit))
-          ). then(() => {
+          ).then(() => {
             setCloudStatus('saved');
             fetchCloudData();
             setTimeout(() => setCloudStatus('idle'), 2000);
@@ -228,23 +287,47 @@ export default function App() {
   const statusLabel = {
     idle: '● LIVE - updating every 2s', 
     saving: '⬆️ Saving to AWS...',
-    saved: '✔️ Saved to DynamoDB'
+    saved: '✔️ Saved to DynamoDB',
   };
+
+  const activeAlerts = alerts.filter(a => 
+    SENSORS.some(s => a.sensor === s.label && readings[s.id] >= s.warn)
+  ).length;
 
   return (
     <div className="app">
       <div className="header">
-        <h1>⚡ GridSense</h1>
-        <span className="status" style={{
-          color: cloudStatus === 'saved' ? '#00e5c8' :
-          cloudStatus === 'saving' ? '#f0a500' : '#3a9a7a'  
-        }}>
-          {statusLabel[cloudStatus]}
-        </span>
+        <h1>
+          ⚡ GridSense{" "}
+          {alerts.length > 0 && (
+            <span className="alert-badge">
+              🔴 {activeAlerts > 0 ? activeAlerts : alerts.length} alert
+              {alerts.length !== 1 ? "s" : ""}
+            </span>
+          )}
+        </h1>
+        <div className="header-right">
+          <button className="theme-toggle" onClick={toggleTheme}>
+            {darkMode ? "☀️ Light" : "🌙 Dark"}
+          </button>
+          <span
+            className="status"
+            style={{
+              color:
+                cloudStatus === "saved"
+                  ? "#00e5c8"
+                  : cloudStatus === "saving"
+                    ? "#f0a500"
+                    : "#3a9a7a",
+            }}
+          >
+            {statusLabel[cloudStatus]}
+          </span>
+        </div>
       </div>
 
       <div className="cards-grid">
-        {SENSORS.map(sensor => (
+        {SENSORS.map((sensor) => (
           <SensorCard
             key={sensor.id}
             sensor={sensor}
@@ -255,11 +338,16 @@ export default function App() {
       </div>
 
       <div className="charts-grid">
-        {SENSORS.map(sensor => (
-          <SensorChart key={sensor.id} sensor={sensor} history={history[sensor.id]} />
+        {SENSORS.map((sensor) => (
+          <SensorChart
+            key={sensor.id}
+            sensor={sensor}
+            history={history[sensor.id]}
+          />
         ))}
       </div>
 
+      <AlertsPanel alerts={alerts} />
       <CloudHistory cloudData={cloudData} loading={cloudLoading} />
     </div>
   );
